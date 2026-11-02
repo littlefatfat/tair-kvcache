@@ -2655,7 +2655,6 @@ struct ValidatedEventLocationSpec {
     std::string_view name;
     std::string_view raw_uri;
     std::string_view checksum;
-    bool checksum_present = false;
     // Canonical ReportEvent URIs never need the heavyweight StandardUri
     // object. Allocate it only for the compatibility fallback so the common
     // validation result stays small and cheap to move through inline storage.
@@ -2686,9 +2685,6 @@ bool ValidateEventLocationSpec(const proto::meta::LocationSpec &spec, ValidatedE
     out.name = spec.name();
     out.raw_uri = spec.uri();
     out.checksum = spec.checksum();
-    // Non-empty values imply presence; an explicitly supplied empty checksum
-    // uses the presence bit to distinguish it from omitted metadata.
-    out.checksum_present = spec.checksum_present() || !spec.checksum().empty();
     if (SnapshotUriUtils::ParseCanonicalUriForSnapshotAppend(out.raw_uri, out.canonical_uri)) {
         out.is_canonical_uri = true;
         out.size = out.canonical_uri.size;
@@ -3364,7 +3360,7 @@ ErrorCode CacheManager::ReportEvent(RequestContext *request_context,
                 LocationSpec versioned_spec;
                 versioned_spec.set_name_view(spec.name);
                 versioned_spec.set_uri(std::move(spec.versioned_uri));
-                if (spec.checksum_present) {
+                if (!spec.checksum.empty()) {
                     versioned_spec.set_checksum(spec.checksum);
                 }
                 apply_delta_spec(location_mutation, true, std::move(versioned_spec), spec.size);
@@ -3534,7 +3530,7 @@ ErrorCode CacheManager::ReportEvent(RequestContext *request_context,
                     LocationSpec versioned_spec;
                     versioned_spec.set_name_view(spec.name);
                     versioned_spec.set_uri(std::move(spec.versioned_uri));
-                    if (spec.checksum_present) {
+                    if (!spec.checksum.empty()) {
                         versioned_spec.set_checksum(spec.checksum);
                     }
                     versioned_specs.push_back(std::move(versioned_spec));
