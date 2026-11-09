@@ -677,7 +677,9 @@ void AdminServiceImpl::RegisterInstance(RequestContext *request_context,
         model_deployment_req,
         location_spec_groups,
         static_cast<CacheManager::QueryType>(request->default_query_type()),
-        request->has_disable_write_session() ? std::optional<bool>(request->disable_write_session()) : std::nullopt);
+        request->write_session_config_case() == proto::admin::RegisterInstanceRequest::kDisableWriteSession
+            ? std::optional<bool>(request->disable_write_session())
+            : std::nullopt);
     if (ec_info != EC_OK) {
         status->set_code(ToAdminPbError(ec_info));
         request_context->set_status_code(status->code());

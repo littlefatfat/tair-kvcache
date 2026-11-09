@@ -399,7 +399,9 @@ void MetaServiceImpl::RegisterInstance(RequestContext *request_context,
         model_deployment_req,
         location_spec_groups,
         static_cast<CacheManager::QueryType>(request->default_query_type()),
-        request->has_disable_write_session() ? std::optional<bool>(request->disable_write_session()) : std::nullopt);
+        request->write_session_config_case() == proto::meta::RegisterInstanceRequest::kDisableWriteSession
+            ? std::optional<bool>(request->disable_write_session())
+            : std::nullopt);
 
     if (ec_info != EC_OK) {
         status->set_code(ToMetaPbError(ec_info));

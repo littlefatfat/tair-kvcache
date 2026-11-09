@@ -1186,7 +1186,7 @@ CacheManager::GetCacheLocationsByBackend(RequestContext *request_context,
                                          const std::vector<BackendSelector> &backend_selectors) {
     const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
     if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
-        return {EC_UNIMPLEMENTED, {}};
+        return {EC_UNIMPLEMENTED, BatchLocationsView()};
     }
 
     SPAN_TRACER(request_context);
@@ -1409,7 +1409,7 @@ CacheManager::StartWriteCache(RequestContext *request_context,
     const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
     if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
         request_context->error_tracer()->AddErrorMsg("write sessions are unsupported by this instance");
-        return {EC_UNIMPLEMENTED, {}};
+        return {EC_UNIMPLEMENTED, StartWriteCacheInfo()};
     }
 
     const std::string &trace_id = request_context->trace_id();
