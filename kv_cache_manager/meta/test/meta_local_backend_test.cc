@@ -534,22 +534,19 @@ TEST_F(MetaLocalBackendTest, TestUpsertPreservesRequestOrderForMixedCapacityBatc
 
     ASSERT_EQ((std::vector<ErrorCode>{EC_OK}), PutWithFieldMaps(backend.get(), {2}, {{{PROPERTY_URI, "existing"}}}));
 
-    // UpdateInPlace historically does not reject charge growth. Therefore the
-    // request order below first admits key 1 while the cache has room, then
-    // expands existing key 2. Reordering all existing updates ahead of all
-    // missing inserts would incorrectly reject the earlier key 1.
+    // Each growth is admitted in request order: key 1 uses the remaining room,
+    // so the subsequent expansion of existing key 2 must leave its old value intact.
     const std::string large_insert(600 * 1024, 'i');
     const std::string large_update(600 * 1024, 'u');
-    EXPECT_EQ((std::vector<ErrorCode>{EC_OK, EC_OK}),
+    EXPECT_EQ((std::vector<ErrorCode>{EC_OK, EC_NOSPC}),
               UpsertWithFieldMaps(
                   backend.get(), {1, 2}, {{{PROPERTY_URI, large_insert}}, {{PROPERTY_HIT_COUNT, large_update}}}));
 
-    AssertGetProperties(
-        backend.get(),
-        {1, 2},
-        {PROPERTY_URI, PROPERTY_HIT_COUNT},
-        {EC_OK, EC_OK},
-        {{{PROPERTY_URI, large_insert}}, {{PROPERTY_URI, "existing"}, {PROPERTY_HIT_COUNT, large_update}}});
+    AssertGetProperties(backend.get(),
+                        {1, 2},
+                        {PROPERTY_URI, PROPERTY_HIT_COUNT},
+                        {EC_OK, EC_OK},
+                        {{{PROPERTY_URI, large_insert}}, {{PROPERTY_URI, "existing"}}});
     ASSERT_EQ(EC_OK, backend->Close());
 
     auto reverse_backend = std::make_shared<MetaLocalBackend>();
@@ -597,7 +594,8 @@ TEST_F(MetaLocalBackendTest, TestBatchedUpsertShapesMatchSequentialReference) {
         SplitFieldMaps(fields, reference_locations, reference_properties);
         std::vector<ErrorCode> reference_results(keys.size(), EC_OK);
         for (size_t i = 0; i < keys.size(); ++i) {
-            reference_results[i] = reference->UpsertForOneKey(keys[i], reference_locations[i], reference_properties[i]);
+            reference_results[i] =
+                reference->UpsertForOneKey(keys[i], reference_locations[i], reference_properties[i], true);
         }
         EXPECT_EQ(reference_results, UpsertWithFieldMaps(optimized.get(), keys, fields));
         observed_keys.insert(keys.begin(), keys.end());

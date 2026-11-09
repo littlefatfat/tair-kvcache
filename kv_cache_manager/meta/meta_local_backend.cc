@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "kv_cache_manager/common/cache/lru_cache.h"
 #include "kv_cache_manager/common/logger.h"
 #include "kv_cache_manager/common/standard_uri.h"
 #include "kv_cache_manager/config/meta_storage_backend_config.h"

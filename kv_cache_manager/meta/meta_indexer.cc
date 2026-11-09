@@ -1328,9 +1328,8 @@ MetaIndexer::LocationResult MetaIndexer::ReadModifyWriteLocationImpl(RequestCont
             uint64_t bytes = 0;
             if (!entry.location->GetValidatedTotalSize(bytes)) {
                 StandardUri uri;
-                if (uri.Parse(entry.location->location_specs().front().uri()) && uri.Valid() &&
-                    !uri.GetParamAs("size", bytes)) {
-                    bytes = 0;
+                if (uri.Parse(entry.location->location_specs().front().uri()) && uri.Valid()) {
+                    uri.GetParamAs("size", bytes);
                 }
             }
             const uint64_t remaining = SubStorageUsageByType(entry.location->type(), bytes);

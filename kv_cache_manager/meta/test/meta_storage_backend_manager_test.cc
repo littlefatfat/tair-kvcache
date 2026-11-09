@@ -345,6 +345,10 @@ public:
 
 class MalformedCacheWriteBackend : public MetaLocalBackend {
 public:
+    ErrorCode CheckWriteCapacity(KeyType, const CacheLocationMap &, const PropertyMap &, bool) noexcept override {
+        return EC_OK;
+    }
+
     std::vector<ErrorCode> Put(RequestContext *,
                                const KeyTypeVec &,
                                const CacheLocationMapVector &,
