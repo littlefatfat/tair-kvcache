@@ -26,6 +26,7 @@ cc_library(
     ],
     deps = [
         ":meta_indexer",
+        "//kv_cache_manager/config",
         ":query_executor",
         "//kv_cache_manager/metrics:revisit_interval_histogram",
     ],
@@ -59,6 +60,9 @@ cc_library(
         "meta_storage_backend_factory.h",
     ],
     deps = [
+        "//kv_cache_manager/common:standard_uri",
+        "//kv_cache_manager/data_storage:snapshot_uri_utils",
+        "//kv_cache_manager/meta/simple:simple_kv_cache_backend",
         ":cache_location",
         ":common",
         ":meta_search_cache",

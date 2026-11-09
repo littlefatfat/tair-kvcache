@@ -383,6 +383,7 @@ ProtoConvert::InstanceInfoToProto(const InstanceInfo &instance_info, T *proto_in
     proto_instance_info->set_instance_group_name(instance_info.instance_group_name());
     proto_instance_info->set_instance_id(instance_info.instance_id());
     proto_instance_info->set_block_size(instance_info.block_size());
+    proto_instance_info->set_disable_write_session(instance_info.disable_write_session());
 
     // 添加location_spec_infos字段
     LocationSpecInfosToProto(instance_info.location_spec_infos(), proto_instance_info->mutable_location_spec_infos());
@@ -426,6 +427,7 @@ ProtoConvert::InstanceInfoFromProto(const T *proto_instance_info, InstanceInfo &
     instance_info.set_location_spec_groups(location_spec_groups);
 
     instance_info.set_default_query_type(static_cast<int32_t>(proto_instance_info->default_query_type()));
+    instance_info.set_disable_write_session(proto_instance_info->disable_write_session());
 }
 
 template <typename T>

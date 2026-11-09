@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -547,6 +548,11 @@ public: // functions
     // Does NOT trigger eviction even if usage exceeds capacity after adjustment.
     virtual void AdjustCharge(Handle * /*handle*/, ssize_t /*delta*/) {}
 
+    // Soft admission snapshot for the key's shard; does not reserve capacity.
+    virtual size_t GetAvailableCapacity(const std::string_view & /*key*/) const {
+        return std::numeric_limits<size_t>::max();
+    }
+
     // Apply a callback to a cache handle. The Cache must ensure the lifetime
     // of the key passed to the callback is valid for the duration of the
     // callback. The handle may not belong to the cache, but is guaranteed to
@@ -817,6 +823,9 @@ public:
         const std::string_view &key,
         const std::function<ssize_t(ObjectPtr obj, size_t charge, const CacheItemHelper *helper)> &callback) override {
         return target_->ApplyToEntryNoTouch(key, callback);
+    }
+    size_t GetAvailableCapacity(const std::string_view &key) const override {
+        return target_->GetAvailableCapacity(key);
     }
 
     void StartAsyncLookup(AsyncLookupHandle &async_handle) override { target_->StartAsyncLookup(async_handle); }

@@ -413,8 +413,7 @@ TEST_F(MetaLocalBackendTest, TestParseStorageUriEmpty) {
     ASSERT_EQ(META_LOCAL_BACKEND_DEFAULT_CAPACITY * 1024 * 1024, backend->cache_->GetCapacity());
     uint32_t expected_shard_mask = (1 << META_LOCAL_BACKEND_DEFAULT_NUM_SHARD_BITS) - 1;
     ASSERT_EQ(expected_shard_mask, backend->shard_mask_);
-    ASSERT_EQ((1u << META_LOCAL_BACKEND_DEFAULT_NUM_ITEM_MUTEX_SHARD_BITS) - 1,
-              backend->item_mutex_shard_mask_);
+    ASSERT_EQ((1u << META_LOCAL_BACKEND_DEFAULT_NUM_ITEM_MUTEX_SHARD_BITS) - 1, backend->item_mutex_shard_mask_);
     ASSERT_EQ(META_LOCAL_BACKEND_DEFAULT_SAMPLE_TIMES, backend->sample_times_);
 
     ASSERT_EQ((std::vector<ErrorCode>{EC_OK}), PutWithFieldMaps(backend.get(), {1}, {{{PROPERTY_URI, "uri1"}}}));
@@ -1215,8 +1214,7 @@ TEST_F(MetaLocalBackendTest, TestMaintenanceTouchRefreshesSingletonShardColdness
     location->set_type(DataStorageType::DATA_STORAGE_TYPE_NFS);
     ASSERT_EQ(std::vector<ErrorCode>{EC_OK}, backend->Put(nullptr, {1}, {{{"loc", location}}}, PropertyMapVector(1)));
     ASSERT_TRUE(backend->cache_->ApplyToEntryNoTouch(
-        MetaLocalBackend::KeyToView(1),
-        [](Cache::ObjectPtr value, size_t, const Cache::CacheItemHelper *) -> ssize_t {
+        MetaLocalBackend::KeyToView(1), [](Cache::ObjectPtr value, size_t, const Cache::CacheItemHelper *) -> ssize_t {
             static_cast<MetaMemCacheItem *>(value)->last_access_time_.store(100);
             return 0;
         }));
@@ -1323,7 +1321,7 @@ TEST_F(MetaLocalBackendTest, TestReclaimSampleReselectsColdShardsAndRespectsSamp
     const auto &coldest_keys = shards.at(cold_shards[0].second);
     for (int attempt = 0; attempt < 2; ++attempt) {
         ReclaimCandidateVector sample;
-        ASSERT_EQ(EC_OK, backend->SampleReclaimCandidates(nullptr, 2, sample));
+        ASSERT_EQ(EC_OK, backend->SampleReclaimCandidates(nullptr, 2, sample, false));
         ASSERT_EQ(2, sample.size());
         for (size_t i = 0; i < sample.size(); ++i) {
             EXPECT_EQ(coldest_keys[i], sample[i].key);
@@ -1335,7 +1333,7 @@ TEST_F(MetaLocalBackendTest, TestReclaimSampleReselectsColdShardsAndRespectsSamp
     // it does not globally merge the individual keys from every shard.
     backend->sample_times_ = 2;
     ReclaimCandidateVector sample;
-    ASSERT_EQ(EC_OK, backend->SampleReclaimCandidates(nullptr, 4, sample));
+    ASSERT_EQ(EC_OK, backend->SampleReclaimCandidates(nullptr, 4, sample, false));
     ASSERT_EQ(4, sample.size());
     EXPECT_EQ(coldest_keys[0], sample[0].key);
     EXPECT_EQ(coldest_keys[1], sample[1].key);
@@ -1349,7 +1347,7 @@ TEST_F(MetaLocalBackendTest, TestReclaimSampleReselectsColdShardsAndRespectsSamp
     PropertyMapVector properties;
     ASSERT_EQ(std::vector<ErrorCode>(coldest_keys.size(), EC_OK),
               backend->GetProperties(nullptr, coldest_keys, {PROPERTY_LRU_TIME}, properties));
-    ASSERT_EQ(EC_OK, backend->SampleReclaimCandidates(nullptr, 2, sample));
+    ASSERT_EQ(EC_OK, backend->SampleReclaimCandidates(nullptr, 2, sample, false));
     ASSERT_EQ(2, sample.size());
     EXPECT_EQ(next_coldest_keys[0], sample[0].key);
     EXPECT_EQ(next_coldest_keys[1], sample[1].key);

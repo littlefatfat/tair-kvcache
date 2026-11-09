@@ -118,11 +118,7 @@ ErrorCode Fail(void * /*obj*/) { return EC_ERROR; }
 } // namespace remove_instance_retire_stub
 
 namespace remove_instance_trim_stub {
-ErrorCode Fail(void * /*obj*/,
-               RequestContext * /*request_context*/,
-               size_t /*scan_batch_size*/) {
-    return EC_ERROR;
-}
+ErrorCode Fail(void * /*obj*/, RequestContext * /*request_context*/, size_t /*scan_batch_size*/) { return EC_ERROR; }
 } // namespace remove_instance_trim_stub
 
 class FailFinalIndexDeleteRegistryBackend : public RegistryLocalBackend {
@@ -734,7 +730,7 @@ public:
     }
 
     ControllableMetaLocalBackend *InstallControllableMetaBackend() {
-        auto indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+        std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
         if (!indexer) {
             return nullptr;
         }
@@ -904,7 +900,9 @@ TEST_F(CacheManagerTest, TestRegisterInstance) {
                                                                 block_size,
                                                                 createLocationSpecInfos(),
                                                                 createModelDeployment(),
-                                                                std::vector<LocationSpecGroup>());
+                                                                std::vector<LocationSpecGroup>(),
+                                                                CacheManager::QueryType::QT_UNSPECIFIED,
+                                                                std::nullopt);
                     EXPECT_EQ(EC_OK, ret.first);
                 });
             }
@@ -935,7 +933,9 @@ TEST_F(CacheManagerTest, TestRegisterInstance) {
                                                                 block_size,
                                                                 createLocationSpecInfos(),
                                                                 createModelDeployment(),
-                                                                std::vector<LocationSpecGroup>());
+                                                                std::vector<LocationSpecGroup>(),
+                                                                CacheManager::QueryType::QT_UNSPECIFIED,
+                                                                std::nullopt);
                     if (ret.first == EC_OK) {
                         ++success_count;
                     } else {
@@ -959,7 +959,9 @@ TEST_F(CacheManagerTest, TestRegisterInstanceRejectsDifferentInstanceGroup) {
                                                                   64,
                                                                   createLocationSpecInfos(),
                                                                   createModelDeployment(),
-                                                                  {});
+                                                                  {},
+                                                                  CacheManager::QueryType::QT_UNSPECIFIED,
+                                                                  std::nullopt);
     EXPECT_EQ(EC_DUPLICATE_ENTITY, ec);
     EXPECT_TRUE(storage_configs.empty());
     const auto existing = registry_manager_->GetInstanceInfo(request_context_.get(), "test_instance");
@@ -987,7 +989,9 @@ TEST_F(CacheManagerTest, TestRegisterInstanceReturnsTieredMigrationStorageConfig
                                                                            64,
                                                                            createLocationSpecInfos(),
                                                                            createModelDeployment(),
-                                                                           std::vector<LocationSpecGroup>());
+                                                                           std::vector<LocationSpecGroup>(),
+                                                                           CacheManager::QueryType::QT_UNSPECIFIED,
+                                                                           std::nullopt);
     ASSERT_EQ(EC_OK, register_ec);
 
     std::vector<std::shared_ptr<StorageConfig>> returned_configs;
@@ -1008,7 +1012,9 @@ TEST_F(CacheManagerTest, TestRemoveInstance) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     {
         auto [ec, ptr] = cache_manager_->GetInstanceInfo(request_context_.get(), "placeholder_id");
         ASSERT_EQ(ErrorCode::EC_OK, ec);
@@ -1059,7 +1065,9 @@ TEST_F(CacheManagerTest, TestRegisterSameInstanceRejectedWhileSearcherDrainsAndR
                                64,
                                createLocationSpecInfos(),
                                createModelDeployment(),
-                               std::vector<LocationSpecGroup>())
+                               std::vector<LocationSpecGroup>(),
+                               CacheManager::QueryType::QT_UNSPECIFIED,
+                               std::nullopt)
             .first;
     };
     ASSERT_EQ(EC_OK, register_instance());
@@ -1117,7 +1125,7 @@ TEST_F(CacheManagerTest, TestRemoveInstanceSearcherDrainTimeoutRetainsRetryPath)
 }
 
 TEST_F(CacheManagerTest, TestRemoveInstanceIndexerDrainWaitExceedsDefaultTimeout) {
-    auto indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
 
     auto remove = std::async(std::launch::async, [this] {
@@ -1163,7 +1171,9 @@ TEST_F(CacheManagerTest, TestRemoveInstanceAllowsRegistrationDuringTrimButReject
                                64,
                                createLocationSpecInfos(),
                                createModelDeployment(),
-                               std::vector<LocationSpecGroup>())
+                               std::vector<LocationSpecGroup>(),
+                               CacheManager::QueryType::QT_UNSPECIFIED,
+                               std::nullopt)
             .first;
     });
     const auto other_status = register_other.wait_for(std::chrono::seconds(2));
@@ -1177,7 +1187,9 @@ TEST_F(CacheManagerTest, TestRemoveInstanceAllowsRegistrationDuringTrimButReject
                                64,
                                createLocationSpecInfos(),
                                createModelDeployment(),
-                               std::vector<LocationSpecGroup>())
+                               std::vector<LocationSpecGroup>(),
+                               CacheManager::QueryType::QT_UNSPECIFIED,
+                               std::nullopt)
             .first;
     });
     const auto same_status = register_same.wait_for(std::chrono::seconds(2));
@@ -1213,7 +1225,9 @@ TEST_F(CacheManagerTest, TestRemoveDistinctInstancesConcurrentlyButBlockStorageM
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>())
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt)
                   .first);
     AddDummyLocationsForTrim(1, "hot_01");
     AddDummyLocationsForTrim(1, "hot_01", other_instance);
@@ -1278,7 +1292,9 @@ TEST_F(CacheManagerTest, TestRemoveInstanceRetriesAfterMetadataDeleteFailure) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>())
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt)
                   .first);
 
     RequestContext retry_ctx("remove_finalize_retry");
@@ -1322,7 +1338,7 @@ TEST_F(CacheManagerTest, TestRemoveInstanceRetriesAfterRegistryCompletionFailure
 }
 
 TEST_F(CacheManagerTest, TestRemoveInstanceDeletesEmptyLocationKey) {
-    auto indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
     CacheLocationMapVector locations(1);
     PropertyMapVector properties(1);
@@ -1335,7 +1351,7 @@ TEST_F(CacheManagerTest, TestRemoveInstanceDeletesEmptyLocationKey) {
 }
 
 TEST_F(CacheManagerTest, TestRemoveInstanceTrimRoundLimitRetainsRetryPath) {
-    auto indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
     auto backend = std::make_unique<NoOpDeleteMetaLocalBackend>();
     ASSERT_EQ(EC_OK, backend->Init("test_instance", std::make_shared<MetaStorageBackendConfig>()));
@@ -1380,11 +1396,13 @@ TEST_F(CacheManagerTest, TestRemoveInstanceDeletesPersistedMetadataBeforeSameIdR
                                64,
                                createLocationSpecInfos(),
                                createModelDeployment(),
-                               std::vector<LocationSpecGroup>())
+                               std::vector<LocationSpecGroup>(),
+                               CacheManager::QueryType::QT_UNSPECIFIED,
+                               std::nullopt)
             .first;
     };
     ASSERT_EQ(EC_OK, register_instance());
-    auto indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer(instance_id);
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer(instance_id);
     ASSERT_NE(nullptr, indexer);
     indexer->key_count_.store(8);
     indexer->PersistMetaData();
@@ -1393,7 +1411,7 @@ TEST_F(CacheManagerTest, TestRemoveInstanceDeletesPersistedMetadataBeforeSameIdR
     RequestContext remove_context("remove_persisted_metadata");
     ASSERT_EQ(EC_OK, cache_manager_->RemoveInstance(&remove_context, "default", instance_id));
     ASSERT_EQ(EC_OK, register_instance());
-    auto fresh_indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer(instance_id);
+    std::shared_ptr<MetaIndexer> fresh_indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer(instance_id);
     ASSERT_NE(nullptr, fresh_indexer);
     EXPECT_EQ(0, fresh_indexer->GetKeyCount());
     CacheLocationMapVector locations;
@@ -1416,7 +1434,9 @@ TEST_F(CacheManagerTest, TestRemoveInstanceTrimsAllPersistedDummyPages) {
                                64,
                                createLocationSpecInfos(),
                                createModelDeployment(),
-                               std::vector<LocationSpecGroup>())
+                               std::vector<LocationSpecGroup>(),
+                               CacheManager::QueryType::QT_UNSPECIFIED,
+                               std::nullopt)
             .first;
     };
     ASSERT_EQ(EC_OK, register_instance());
@@ -1430,7 +1450,7 @@ TEST_F(CacheManagerTest, TestRemoveInstanceTrimsAllPersistedDummyPages) {
     RequestContext remove_context("remove_paged_dummy_cache");
     ASSERT_EQ(EC_OK, cache_manager_->RemoveInstance(&remove_context, "default", instance_id));
     ASSERT_EQ(EC_OK, register_instance());
-    auto indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer(instance_id);
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer(instance_id);
     ASSERT_NE(nullptr, indexer);
     KeyVector remaining;
     std::string cursor;
@@ -1468,7 +1488,7 @@ TEST_F(CacheManagerTest, TestRemoveInstanceDuringMetaRecoveryTransition) {
         std::string saved_cursor_;
     };
 
-    auto indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
     auto &backend_manager = *indexer->backend_manager_;
     auto config = std::make_shared<MetaStorageBackendConfig>();
@@ -1527,7 +1547,7 @@ TEST_F(CacheManagerTest, TestRecover) {
     ASSERT_TRUE(meta_searcher);
     ASSERT_TRUE(meta_searcher->meta_indexer_);
     ASSERT_EQ("test_instance", meta_searcher->meta_indexer_->instance_id_);
-    auto meta_indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
     ASSERT_TRUE(meta_indexer);
     ASSERT_EQ("test_instance", meta_indexer->instance_id_);
 }
@@ -1550,7 +1570,7 @@ TEST_F(CacheManagerTest, TestCleanup) {
     ASSERT_TRUE(meta_searcher);
     ASSERT_TRUE(meta_searcher->meta_indexer_);
     ASSERT_EQ("test_instance", meta_searcher->meta_indexer_->instance_id_);
-    auto meta_indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
     ASSERT_TRUE(meta_indexer);
     ASSERT_EQ("test_instance", meta_indexer->instance_id_);
 }
@@ -1588,7 +1608,9 @@ TEST_F(CacheManagerTest, TestStartWriteCache) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3};
     auto [ec, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 1000);
@@ -1619,9 +1641,11 @@ TEST_F(CacheManagerTest, TestStartWriteCacheRollsBackPartialBatchAdd) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_TRUE(meta_indexer);
     meta_indexer->batch_key_size_ = 1;
     meta_indexer->max_key_count_ = 1;
@@ -1679,7 +1703,9 @@ TEST_F(CacheManagerTest, TestStartWriteDuplicateCache) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     {
         std::vector<int64_t> keys{1, 2};
         auto [ec, start_write_cache_info] =
@@ -1732,7 +1758,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheSpecGroupNamesWithTokenIdsOnly) {
                                                kBlockSize,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               location_spec_groups));
+                                               location_spec_groups,
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // 3 blocks of tokens, no block_keys: the middle block carries no state.
     CacheManager::TokenIdsVector tokens;
@@ -1767,7 +1795,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheRecordWriteBytes) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     // 取出统计的写入量
     auto get_write_bytes = [&]() {
         return metrics_registry_
@@ -1783,7 +1813,8 @@ TEST_F(CacheManagerTest, TestStartWriteCacheRecordWriteBytes) {
     ASSERT_EQ(3 * 4 * 512, get_write_bytes()); // 验证写入量
 
     { // 部分写入成功场景，不新增写入量，写入量统计放在 BatchAddLoation 成功之后
-        auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+        std::shared_ptr<MetaIndexer> meta_indexer =
+            cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
         ASSERT_TRUE(meta_indexer);
 
         // 先备份原设置
@@ -1829,7 +1860,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheWithMinReplica) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     std::vector<int64_t> keys{1};
 
@@ -1899,7 +1932,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheWithMinReplica) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               location_spec_groups));
+                                               location_spec_groups,
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // Scenario D: fresh key, evict with group "F0", min=2 -> needs write; returned location has only F0 specs.
     std::vector<int64_t> keys_sg2{100};
@@ -1991,7 +2026,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheWithLocationSpecGroup) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               location_spec_groups));
+                                               location_spec_groups,
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     // have been sorted
     ASSERT_EQ(
         std::string("F0"),
@@ -2095,7 +2132,9 @@ TEST_F(CacheManagerTest, TestWriteCacheTimeout) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2};
     auto [ec, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 1);
@@ -2122,7 +2161,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationPrefixMatch) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 100000000);
@@ -2205,7 +2246,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationHitRateCounters) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // Write blocks {1, 2, 3}
     std::vector<int64_t> write_keys{1, 2, 3};
@@ -2271,7 +2314,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationHitRateCounters_BatchGet) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // Write blocks {1, 2, 3}
     std::vector<int64_t> write_keys{1, 2, 3};
@@ -2345,7 +2390,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationBatchGet) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3, 4};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 100000000);
@@ -2430,7 +2477,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationReverseRollSlideWindowMatch) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3, 4, 5, 6};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 100000000);
@@ -2550,7 +2599,9 @@ TEST_F(CacheManagerTest, TestGetCacheNotExistLocation) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 100000000);
@@ -2587,7 +2638,9 @@ TEST_F(CacheManagerTest, TestFinishWriteCacheWithBlockMask) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     {
         std::vector<int64_t> keys{1, 2, 3};
         auto [ec1, start_write_cache_info] =
@@ -2722,7 +2775,9 @@ TEST_F(CacheManagerTest, TestGetCacheMeta) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 100000000);
@@ -2775,7 +2830,9 @@ TEST_F(CacheManagerTest, TestGetNotExistCacheMeta) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3, 4};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "test_instance", keys, {}, {}, 100000000);
@@ -2811,7 +2868,9 @@ TEST_F(CacheManagerTest, TestRemoveCache) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3};
     auto [ec1, start_write_cache_info] =
         cache_manager_->StartWriteCache(request_context_.get(), "placeholder_id", keys, {}, {}, 100000000);
@@ -2871,7 +2930,9 @@ TEST_F(CacheManagerTest, TestTrimCache) {
                                          64,
                                          createLocationSpecInfos(),
                                          createModelDeployment(),
-                                         std::vector<LocationSpecGroup>());
+                                         std::vector<LocationSpecGroup>(),
+                                         CacheManager::QueryType::QT_UNSPECIFIED,
+                                         std::nullopt);
         std::vector<std::int64_t> keys{1, 2, 3};
         auto [ec0, _info] =
             cache_manager_->StartWriteCache(request_context_.get(), "placeholder_id", keys, {}, {}, 100000000);
@@ -2902,7 +2963,9 @@ TEST_F(CacheManagerTest, TestTrimCache) {
                                          64,
                                          createLocationSpecInfos(),
                                          createModelDeployment(),
-                                         std::vector<LocationSpecGroup>());
+                                         std::vector<LocationSpecGroup>(),
+                                         CacheManager::QueryType::QT_UNSPECIFIED,
+                                         std::nullopt);
         std::vector<std::int64_t> keys;
         for (std::int64_t i = 0; i < 65; ++i) {
             keys.push_back(i);
@@ -3027,7 +3090,7 @@ TEST_F(CacheManagerTest, TestTrimCacheStopsSubmittingAfterExecutorFailure) {
 TEST_F(CacheManagerTest, TestTrimCacheSkipsPersistentResiduesAfterPartialFailure) {
     auto *persistent = InstallControllableMetaBackend();
     ASSERT_NE(nullptr, persistent);
-    const auto indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    const std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
 
     auto backend_config = std::make_shared<MetaStorageBackendConfig>();
@@ -3051,7 +3114,7 @@ TEST_F(CacheManagerTest, TestTrimCacheSkipsPersistentResiduesAfterPartialFailure
 TEST_F(CacheManagerTest, TestTrimCacheSyncsBeforeCleaningPersistentResidueWithEmptyLocal) {
     auto *persistent = InstallControllableMetaBackend();
     ASSERT_NE(nullptr, persistent);
-    const auto indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    const std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
 
     auto backend_config = std::make_shared<MetaStorageBackendConfig>();
@@ -3175,7 +3238,9 @@ TEST_F(CacheManagerTest, TestUnavailableStorage) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     auto test_write_and_find_location = [this](int start,
                                                DataStorageType expect_type,
@@ -3290,7 +3355,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheWithNoAvailableStorage) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     ASSERT_EQ(EC_OK, registry_manager_->DisableStorage(request_context_.get(), "nfs_01"));
 
@@ -3310,7 +3377,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationLen) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     std::vector<int64_t> keys{1, 2, 3, 4, 5, 6, 7};
     auto [ec1, start_write_cache_info] =
@@ -3593,8 +3662,7 @@ TEST_F(CacheManagerTest, TestGetCheckLocDataExistFunc_MissingEventReportBackendF
     loc.set_id("kvs#event_report_l1p5#mem#192.168.1.100:8080");
     loc.set_status(CLS_SERVING);
     loc.set_type(DataStorageType::DATA_STORAGE_TYPE_EVENT_REPORT_L1P5);
-    loc.set_location_specs(
-        {LocationSpec("tp0", "event_report://cache-node/mem?s_v=01234567")});
+    loc.set_location_specs({LocationSpec("tp0", "event_report://cache-node/mem?s_v=01234567")});
 
     EXPECT_FALSE(func(loc));
 }
@@ -3948,7 +4016,7 @@ TEST_F(CacheManagerTest, TestOldDeltaCannotCrossReporterLifecycleAfterReregister
     auto *meta_backend = InstallControllableMetaBackend();
     ASSERT_NE(nullptr, event_backend);
     ASSERT_NE(nullptr, meta_backend);
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, meta_indexer);
     while (meta_indexer->GetMutexShardIndex(key) == meta_indexer->GetMutexShardIndex(new_key)) {
         ++new_key;
@@ -4188,7 +4256,7 @@ public:
     }
 
     void SetCreationTimes(const KeyVector &keys, const std::vector<int64_t> &times) {
-        auto indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+        std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
         const auto result = indexer->ReadModifyWriteLocation(
             request_context_.get(),
             keys,
@@ -4198,7 +4266,9 @@ public:
                 location->set_create_time(times[index]);
                 locations.front() = std::move(location);
                 return LocationModifierResult{MA_OK, ecs};
-            });
+            },
+            true,
+            false);
         ASSERT_EQ(EC_OK, result.ec);
     }
 
@@ -4266,7 +4336,9 @@ TEST_F(ReportEventLifetimeTest, IsolatesInstancesAndRemovesOnlyRetiredSeries) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>())
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt)
                   .first);
     InitializeEventReporter(other, host_, proto::meta::ST_EVENT_REPORT_L2);
 
@@ -4329,7 +4401,9 @@ TEST_F(ReportEventLifetimeTest, OtherInstanceRemovalDoesNotBlockDeletionForMetri
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     {})
+                                     {},
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt)
                   .first);
     ASSERT_EQ(EC_OK, CallReportEvent(MakeAddRequest(host_, 101, "before_removal"), "lifetime_add").first);
     ASSERT_NE(
@@ -4529,7 +4603,7 @@ TEST_F(CacheManagerTest, TestReportEventFlatFoldMatchesReferenceAcrossBlocksMedi
         EXPECT_EQ(expected_specs, actual_specs) << "block key " << keys[key_index];
     }
 
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, meta_indexer);
     EXPECT_EQ(expected_total_size,
               meta_indexer->GetStorageUsageByType(DataStorageType::DATA_STORAGE_TYPE_EVENT_REPORT_L2));
@@ -4737,7 +4811,8 @@ TEST_F(CacheManagerTest, TestReportEventCrossRequestMultiReporterStateMatchesRef
             }
         }
 
-        auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+        std::shared_ptr<MetaIndexer> meta_indexer =
+            cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
         ASSERT_NE(nullptr, meta_indexer);
         EXPECT_EQ(expected_total_size,
                   meta_indexer->GetStorageUsageByType(DataStorageType::DATA_STORAGE_TYPE_EVENT_REPORT_L2))
@@ -4779,7 +4854,7 @@ TEST_F(CacheManagerTest, TestReportEventFoldedTotalSizeOverflowFailsWithoutMetad
     EXPECT_TRUE(response.snapshot_required());
     EXPECT_TRUE(QueryRawEventReportUris(key).empty());
 
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, meta_indexer);
     EXPECT_EQ(0u, meta_indexer->GetStorageUsageByType(DataStorageType::DATA_STORAGE_TYPE_EVENT_REPORT_L2));
 }
@@ -4830,7 +4905,7 @@ TEST_F(CacheManagerTest, TestReportEventRejectsMergeThatOverflowsExistingLocatio
     ASSERT_EQ(1u, stored_specs.size());
     EXPECT_EQ("tp0", stored_specs[0].name());
 
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, meta_indexer);
     EXPECT_EQ(std::numeric_limits<std::uint64_t>::max(),
               meta_indexer->GetStorageUsageByType(DataStorageType::DATA_STORAGE_TYPE_EVENT_REPORT_L2));
@@ -4875,7 +4950,7 @@ TEST_F(CacheManagerTest, TestReportEventCapacityFailurePreservesExistingUpdateAn
     ASSERT_NE(nullptr, event_backend);
     ASSERT_EQ(EC_OK, event_backend->RegisterNode("test_instance", host, {"mem"}));
 
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, meta_indexer);
     meta_indexer->max_key_count_ = 1;
 
@@ -5827,9 +5902,8 @@ TEST_F(CacheManagerTest, TestReportEventSnapshotReplacesCompleteSpecSetPerBlock)
     for (const auto &location : snapshot_locations.cache_locations_view()) {
         for (const auto &spec : location.location_specs()) {
             const auto &spec_infos = instance_info->location_spec_infos();
-            const auto it = std::find_if(spec_infos.begin(), spec_infos.end(), [&](const auto &info) {
-                return info.name() == spec.name();
-            });
+            const auto it = std::find_if(
+                spec_infos.begin(), spec_infos.end(), [&](const auto &info) { return info.name() == spec.name(); });
             ASSERT_NE(spec_infos.end(), it);
             EXPECT_EQ(&it->name(), &spec.name());
         }
@@ -6347,7 +6421,7 @@ TEST_F(CacheManagerTest, TestSnapshotCleanupCASPreservesLocationRefreshedAfterSc
     std::vector<int64_t> captured_keys;
     std::vector<std::vector<std::string>> captured_location_ids;
     std::vector<std::vector<std::string>> captured_expected_values;
-    auto indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
+    std::shared_ptr<MetaIndexer> indexer = cache_manager_->meta_indexer_manager()->GetMetaIndexer("test_instance");
     ASSERT_NE(nullptr, indexer);
     MetaSearcher paused_cleanup_searcher(
         indexer,
@@ -6655,12 +6729,8 @@ TEST_F(CacheManagerTest, TestGetCheckLocDataExistFuncEventReportUriValidationMat
         {"version_without_equals", {"event_report://physical-cache:9600/mem?s_v"}, false},
         {"short_version", {"event_report://physical-cache:9600/mem?s_v=" + std::string(7, 'a')}, false},
         {"long_version", {"event_report://physical-cache:9600/mem?s_v=" + std::string(9, 'a')}, false},
-        {"non_hex_version",
-         {"event_report://physical-cache:9600/mem?s_v=0123456g"},
-         false},
-        {"duplicate_same_version",
-         {"event_report://physical-cache:9600/mem?s_v=" + token + "&s_v=" + token},
-         false},
+        {"non_hex_version", {"event_report://physical-cache:9600/mem?s_v=0123456g"}, false},
+        {"duplicate_same_version", {"event_report://physical-cache:9600/mem?s_v=" + token + "&s_v=" + token}, false},
         {"duplicate_different_version",
          {"event_report://physical-cache:9600/mem?s_v=" + token + "&s_v=" + upper_token},
          false},
@@ -6675,8 +6745,7 @@ TEST_F(CacheManagerTest, TestGetCheckLocDataExistFuncEventReportUriValidationMat
           "event_report://physical-cache:9600/mem?source=legacy"},
          true},
         {"mixed_valid_and_malformed",
-         {"event_report://physical-cache:9600/mem?s_v=" + token,
-          "event_report://physical-cache:9600/mem?s_v=bad"},
+         {"event_report://physical-cache:9600/mem?s_v=" + token, "event_report://physical-cache:9600/mem?s_v=bad"},
          false},
         {"mixed_valid_and_duplicate",
          {"event_report://physical-cache:9600/mem?s_v=" + token,
@@ -6933,7 +7002,9 @@ TEST_F(CacheManagerTest, TestGetSubmitDelReqFunc_DeletesLocationMetadata) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     std::vector<std::int64_t> keys{1001, 1002};
     auto [ec1, start_write_cache_info] =
@@ -7006,7 +7077,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCache_NoStaleLocations) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // write keys {1,2} and finish them as CLS_SERVING
     std::vector<std::int64_t> write_keys{1, 2};
@@ -7059,7 +7132,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCache_StaleBreaksPrefix) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // This test removes queued executor tasks for direct inspection. Stop the
     // supervisor first so it cannot wait on a packaged task that the test then
@@ -7155,7 +7230,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCache_AllStale) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // This test inspects the queued delete request directly. Stop the
     // supervisor so it cannot concurrently consume a future whose scheduled
@@ -7237,7 +7314,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCache_StaleSuffix) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // This test removes queued executor tasks for direct inspection. Stop the
     // supervisor first so it cannot wait on a packaged task that the test then
@@ -7328,7 +7407,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCache_StaleVsNonEmptyBlockMask) {
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     // write keys {1,2,3,4} and finish as CLS_SERVING
     std::vector<std::int64_t> write_keys{1, 2, 3, 4};
@@ -7395,7 +7476,9 @@ TEST_F(CacheManagerTest, TestStartWriteCacheSpecGroupDedup) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               location_spec_groups));
+                                               location_spec_groups,
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{1, 2, 3};
 
     // First write: F0 group
@@ -7472,7 +7555,9 @@ TEST_F(CacheManagerTest, TestWriteThenReadRoundTripWithSpecGroups) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               location_spec_groups));
+                                               location_spec_groups,
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     std::vector<int64_t> keys{100, 200, 300};
 
     // Write F0 group
@@ -8355,7 +8440,9 @@ TEST_F(CacheManagerTest, TestReportEventBlockAddMergesLocationSpecs) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     auto event_backend = std::make_shared<EventReportBackend>(cache_manager_->metrics_registry_);
     {
@@ -8553,7 +8640,9 @@ TEST_F(CacheManagerTest, TestReportEventL1P5L2BlockAddAreIsolated) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     auto make_backend = [&](const std::string &name, DataStorageType type) {
         auto backend = std::make_shared<EventReportBackend>(cache_manager_->metrics_registry_);
@@ -8649,7 +8738,9 @@ TEST_F(CacheManagerTest, TestReportEventBlockDeleteRemovesLocationSpecs) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     auto event_backend = std::make_shared<EventReportBackend>(cache_manager_->metrics_registry_);
     {
@@ -8776,7 +8867,9 @@ TEST_F(CacheManagerTest, TestGetCacheLocationsByBackend) {
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     std::vector<int64_t> all_keys{300, 400, 500, 600, 700};
 
@@ -9373,7 +9466,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheStateDoesNotExposeStartWriteBeforeFinis
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
                                                std::vector<LocationSpecGroup>(),
-                                               CacheManager::QueryType::QT_PREFIX_MATCH));
+                                               CacheManager::QueryType::QT_PREFIX_MATCH,
+                                               std::nullopt));
 
     const CacheManager::KeyVector keys = {8999};
     auto [start_ec, write_info] =
@@ -9548,7 +9642,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheStateForV6DAndSubscriberReportingModes)
                                                    createLocationSpecInfos(),
                                                    createModelDeployment(),
                                                    std::vector<LocationSpecGroup>(),
-                                                   CacheManager::QueryType::QT_PREFIX_MATCH));
+                                                   CacheManager::QueryType::QT_PREFIX_MATCH,
+                                                   std::nullopt));
     };
 
     auto report_block = [&](const std::string &instance_id,
@@ -9789,7 +9884,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheState) {
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
                                                std::vector<LocationSpecGroup>(),
-                                               CacheManager::QueryType::QT_PREFIX_MATCH));
+                                               CacheManager::QueryType::QT_PREFIX_MATCH,
+                                               std::nullopt));
 
     // Set up EventReportBackend so that location_ids carry host_ip_port
     auto metrics_registry = cache_manager_->metrics_registry_;
@@ -10022,9 +10118,10 @@ protected:
                  int64_t sliding_window_tokens = 0) {
         auto model = createModelDeployment();
         model.set_sliding_window_tokens(sliding_window_tokens);
-        ASSERT_EQ(std::make_pair(EC_OK, default_storage_configs),
-                  cache_manager_->RegisterInstance(
-                      request_context_.get(), "default", instance_id_, 64, specs, model, groups, query_type));
+        ASSERT_EQ(
+            std::make_pair(EC_OK, default_storage_configs),
+            cache_manager_->RegisterInstance(
+                request_context_.get(), "default", instance_id_, 64, specs, model, groups, query_type, std::nullopt));
         auto dsm = registry_manager_->data_storage_manager_;
         tair_ = std::make_shared<testing::NiceMock<MockDataStorageBackend>>(metrics_registry_);
         ON_CALL(*tair_, GetType()).WillByDefault(testing::Return(DataStorageType::DATA_STORAGE_TYPE_TAIR_MEMPOOL));
@@ -10724,7 +10821,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheStateP2P) {
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
                                                std::vector<LocationSpecGroup>(),
-                                               CacheManager::QueryType::QT_PREFIX_MATCH));
+                                               CacheManager::QueryType::QT_PREFIX_MATCH,
+                                               std::nullopt));
 
     auto make_backend = [&](const std::string &name, DataStorageType type) {
         auto backend = std::make_shared<EventReportBackend>(cache_manager_->metrics_registry_);
@@ -10919,7 +11017,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheStateP2P) {
                                                mamba_location_spec_infos,
                                                createModelDeploymentWithEaglePop(),
                                                mamba_location_spec_groups,
-                                               CacheManager::QueryType::QT_PREFIX_MATCH_WITH_MAMBA));
+                                               CacheManager::QueryType::QT_PREFIX_MATCH_WITH_MAMBA,
+                                               std::nullopt));
 
     const std::string mamba_host = "10.0.3.1:8080";
     const std::string mamba_p2p_host = "10.0.3.2:8080";
@@ -10994,7 +11093,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheStateP2P) {
                                                coverage_spec_infos,
                                                createModelDeployment(),
                                                coverage_spec_groups,
-                                               CacheManager::QueryType::QT_PREFIX_MATCH_WITH_MAMBA));
+                                               CacheManager::QueryType::QT_PREFIX_MATCH_WITH_MAMBA,
+                                               std::nullopt));
 
     const std::string coverage_host = "10.0.4.1:8080";
     const std::string prefix_peer = "10.0.4.2:8080";
@@ -11148,7 +11248,9 @@ TEST_F(CacheManagerTest, TestGetHostCacheStateUnspecifiedWithoutRegisteredQueryT
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
 
     CacheManager::KeyVector keys = {100};
     auto [ec, hosts] = cache_manager_->GetHostCacheState(
@@ -11178,7 +11280,8 @@ TEST_F(CacheManagerTest, TestGetHostCacheStatePrefixMatchWithMamba) {
                                                location_spec_infos,
                                                createModelDeploymentWithEaglePop(),
                                                location_spec_groups,
-                                               CacheManager::QueryType::QT_PREFIX_MATCH_WITH_MAMBA));
+                                               CacheManager::QueryType::QT_PREFIX_MATCH_WITH_MAMBA,
+                                               std::nullopt));
 
     auto metrics_registry = cache_manager_->metrics_registry_;
     auto event_backend = std::make_shared<EventReportBackend>(metrics_registry);
@@ -11341,7 +11444,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheTieredMarkPropagation) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("placeholder_id");
     ASSERT_TRUE(meta_searcher);
 
@@ -11391,7 +11496,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheFallsBackToOrdinaryPolicyOnMarkRead
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("mark_read_error");
     ASSERT_TRUE(meta_searcher);
 
@@ -11437,7 +11544,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheInvalidTieredTargetUsesOrdinaryPoli
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("invalid_tiered_target");
     ASSERT_TRUE(meta_searcher);
 
@@ -11486,7 +11595,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheUnavailableTieredTargetUsesOrdinary
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("unavailable_tiered_target");
     ASSERT_TRUE(meta_searcher);
 
@@ -11533,7 +11644,9 @@ TEST_F(CacheManagerTest, TestMigrationTargetsRespectGroupQuota) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto default_group = registry_manager_->instance_group_configs_["default"];
     ASSERT_NE(nullptr, default_group);
     default_group->set_quota(InstanceGroupQuota(0, {}));
@@ -11565,7 +11678,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheWithMinReplicaFallsBackOnMarkReadEr
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("min_replica_mark_read_error");
     ASSERT_TRUE(meta_searcher);
 
@@ -11614,7 +11729,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheWithMinReplicaInvalidTieredTargetUs
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("min_replica_invalid_target");
     ASSERT_TRUE(meta_searcher);
 
@@ -11669,7 +11786,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheSkipsTieredMarkWhenMigrationDisable
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("tiered_disabled");
     ASSERT_TRUE(meta_searcher);
 
@@ -11708,7 +11827,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheTieredMarkSkipsExistingTarget) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("placeholder_id");
     ASSERT_TRUE(meta_searcher);
 
@@ -11769,7 +11890,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheTieredStaleTargetTriggersRewrite) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("stale_tier_instance");
     ASSERT_TRUE(meta_searcher);
 
@@ -11831,7 +11954,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheWithMinReplicaUsesTieredMarkTarget)
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("min_replica_tiered");
     ASSERT_TRUE(meta_searcher);
 
@@ -11873,7 +11998,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheWithMinReplicaHonorsTieredMarkWhenR
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("min_replica_satisfied_tiered");
     ASSERT_TRUE(meta_searcher);
 
@@ -11943,7 +12070,9 @@ TEST_F(CacheManagerTest, TestFilterWriteCacheTieredMarkChecksSpecGroupOnTarget) 
                                                64,
                                                location_spec_infos,
                                                createModelDeployment(),
-                                               location_spec_groups));
+                                               location_spec_groups,
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("tiered_spec_group");
     ASSERT_TRUE(meta_searcher);
 
@@ -12310,7 +12439,9 @@ TEST_F(CacheManagerTest, TestGenWriteLocationTieredRouting) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     // cold_01 由 fixture 注册（dummy + MightExist=true）。
 
     CacheManager::KeyVector new_keys = {1, 2};
@@ -12337,7 +12468,9 @@ TEST_F(CacheManagerTest, TestGenWriteLocationAllTieredDoesNotRequireDefaultStora
                                                64,
                                                createLocationSpecInfos(),
                                                createModelDeployment(),
-                                               std::vector<LocationSpecGroup>()));
+                                               std::vector<LocationSpecGroup>(),
+                                               CacheManager::QueryType::QT_UNSPECIFIED,
+                                               std::nullopt));
     // cold_01 由 fixture 注册（dummy + MightExist=true）。
     ASSERT_EQ(EC_OK, registry_manager_->DisableStorage(request_context_.get(), "nfs_01"));
 
@@ -12366,7 +12499,9 @@ TEST_F(CacheManagerTest, TestGenWriteLocationMissingTieredTargetDoesNotFallback)
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     ASSERT_EQ(EC_OK, registry_manager_->data_storage_manager()->UnRegisterStorage("cold_01"));
 
     CacheLocationVector new_locations;
@@ -12386,7 +12521,9 @@ TEST_F(CacheManagerTest, TestFinishWriteCacheClearsTieredMark) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("placeholder_id");
     ASSERT_TRUE(meta_searcher);
     std::vector<std::string> source_ids;
@@ -12437,7 +12574,9 @@ TEST_F(CacheManagerTest, TestAdminMarkUsesMatchingStrategyTimeout) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("admin_mark_timeout_instance");
     ASSERT_TRUE(meta_searcher);
     auto source_loc =
@@ -12491,7 +12630,9 @@ TEST_F(CacheManagerTest, TestAdminMarkAllowsUnmatchedTargetWithDefaultTimeout) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("admin_mark_unmatched_target");
     ASSERT_TRUE(meta_searcher);
     auto source_loc =
@@ -12553,7 +12694,9 @@ TEST_F(CacheManagerTest, TestFinishWriteCacheFullBlockPolicyKeepsPartialMark) {
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("full_policy_instance");
     ASSERT_TRUE(meta_searcher);
 
@@ -12619,7 +12762,9 @@ TEST_F(CacheManagerTest, TestFinishWriteCacheSkipsTieredMarkWhenMigrationDisable
                                      64,
                                      createLocationSpecInfos(),
                                      createModelDeployment(),
-                                     std::vector<LocationSpecGroup>());
+                                     std::vector<LocationSpecGroup>(),
+                                     CacheManager::QueryType::QT_UNSPECIFIED,
+                                     std::nullopt);
     auto meta_searcher = cache_manager_->meta_searcher_manager_->GetMetaSearcher("tiered_disabled_finish");
     ASSERT_TRUE(meta_searcher);
 

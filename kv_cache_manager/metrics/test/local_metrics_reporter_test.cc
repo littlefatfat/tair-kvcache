@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -524,13 +525,22 @@ TEST_F(LocalMetricsReporterTest, TestReportIntervalCacheManagerMetrics) {
     ASSERT_EQ(ErrorCode::EC_OK, registry_manager_->CreateInstanceGroup(&request_context, instance_group));
 
     ASSERT_EQ(ErrorCode::EC_OK,
-              registry_manager_->RegisterInstance(
-                  &request_context, "test_group", "test_instance_id", 8, {LocationSpecInfo("tp0", 1024)}, {}));
+              registry_manager_->RegisterInstance(&request_context,
+                                                  "test_group",
+                                                  "test_instance_id",
+                                                  8,
+                                                  {LocationSpecInfo("tp0", 1024)},
+                                                  {},
+                                                  {},
+                                                  0,
+                                                  std::nullopt));
 
     auto meta_indexer_config = std::make_shared<MetaIndexerConfig>();
-    ASSERT_EQ(ErrorCode::EC_OK,
-              cache_manager_->meta_indexer_manager_->CreateMetaIndexer("test_instance_id", meta_indexer_config));
-    auto meta_indexer = cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance_id");
+    ASSERT_EQ(
+        ErrorCode::EC_OK,
+        cache_manager_->meta_indexer_manager_->CreateMetaIndexer("test_instance_id", meta_indexer_config, {}, nullptr));
+    std::shared_ptr<MetaIndexer> meta_indexer =
+        cache_manager_->meta_indexer_manager_->GetMetaIndexer("test_instance_id");
     meta_indexer->key_count_.store(5);
     meta_indexer->AddStorageUsageByType(DataStorageType::DATA_STORAGE_TYPE_NFS, 1024 * 5);
     cache_manager_->metrics_recorder_->Start();
@@ -590,15 +600,15 @@ TEST_F(LocalMetricsReporterTest, InstanceMetaCacheUsageTracksLocalEntriesAndLife
     const std::map<std::string, std::string> instance_groups{
         {"small", "group_a"}, {"large", "group_b"}, {"empty", "group_a"}};
     for (const auto &[instance_id, group] : instance_groups) {
-        ASSERT_EQ(
-            EC_OK,
-            registry_manager_->RegisterInstance(&context, group, instance_id, 8, {LocationSpecInfo("tp0", 1024)}, {}));
         ASSERT_EQ(EC_OK,
-                  cache_manager_->meta_indexer_manager_->CreateMetaIndexer(instance_id,
-                                                                           std::make_shared<MetaIndexerConfig>()));
+                  registry_manager_->RegisterInstance(
+                      &context, group, instance_id, 8, {LocationSpecInfo("tp0", 1024)}, {}, {}, 0, std::nullopt));
+        ASSERT_EQ(EC_OK,
+                  cache_manager_->meta_indexer_manager_->CreateMetaIndexer(
+                      instance_id, std::make_shared<MetaIndexerConfig>(), {}, nullptr));
     }
-    auto small = cache_manager_->meta_indexer_manager_->GetMetaIndexer("small");
-    auto large = cache_manager_->meta_indexer_manager_->GetMetaIndexer("large");
+    std::shared_ptr<MetaIndexer> small = cache_manager_->meta_indexer_manager_->GetMetaIndexer("small");
+    std::shared_ptr<MetaIndexer> large = cache_manager_->meta_indexer_manager_->GetMetaIndexer("large");
     CacheLocationMapVector locations(1);
     PropertyMapVector small_properties{{{"payload", std::string(128, 'a')}}};
     PropertyMapVector large_properties{{{"payload", std::string(4096, 'b')}}};

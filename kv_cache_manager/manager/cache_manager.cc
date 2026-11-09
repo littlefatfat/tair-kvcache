@@ -653,7 +653,8 @@ CacheManager::RegisterInstance(RequestContext *request_context,
                                const std::vector<LocationSpecInfo> &location_spec_infos,
                                const ModelDeployment &model_deployment,
                                const std::vector<LocationSpecGroup> &location_spec_groups,
-                               QueryType default_query_type) {
+                               QueryType default_query_type,
+                               std::optional<bool> disable_write_session) {
     SPAN_TRACER(request_context);
     std::shared_lock<std::shared_mutex> lifecycle_guard(metrics_lifecycle_->mut_);
     const auto &trace_id = request_context->trace_id();
@@ -664,6 +665,9 @@ CacheManager::RegisterInstance(RequestContext *request_context,
                                                         model_deployment,
                                                         location_spec_groups,
                                                         static_cast<int32_t>(default_query_type));
+        if (disable_write_session.has_value() && instance_info->disable_write_session() != *disable_write_session) {
+            mismatched.emplace_back("disable_write_session");
+        }
         if (instance_info->instance_group_name() != instance_group) {
             mismatched.insert(mismatched.begin(), "instance_group_name");
         }
@@ -688,7 +692,8 @@ CacheManager::RegisterInstance(RequestContext *request_context,
                                                   location_spec_infos,
                                                   model_deployment,
                                                   location_spec_groups,
-                                                  static_cast<int32_t>(default_query_type));
+                                                  static_cast<int32_t>(default_query_type),
+                                                  disable_write_session);
     RETURN_IF_EC_NOT_OK_WITH_TYPE_LOG(WARN, ec, std::string, "register instance failed with errorcode: %d", ec);
     ec = TryCreateMetaSearcher(request_context, instance_id);
     RETURN_IF_EC_NOT_OK_WITH_TYPE_LOG(WARN, ec, std::string, "register instance failed with errorcode: %d", ec);
@@ -802,7 +807,7 @@ ErrorCode CacheManager::RemoveInstance(RequestContext *request_context,
             RETURN_IF_EC_NOT_OK_WITH_LOG(WARN, EC_ERROR, "remove instance failed: cache config unavailable");
         }
         ec = meta_indexer_manager_->CreateMetaIndexer(
-            instance_id, cache_config->meta_indexer_config(), group->revisit_interval_buckets());
+            instance_id, cache_config->meta_indexer_config(), group->revisit_interval_buckets(), pending);
         RETURN_IF_EC_NOT_OK_WITH_LOG(WARN, ec, "remove instance failed: create meta indexer");
         meta_indexer = meta_indexer_manager_->ExtractMetaIndexer(instance_id);
     }
@@ -999,6 +1004,11 @@ ErrorCode CacheManager::PerformCacheLocationQuery(RequestContext *request_contex
                                                   int32_t sw_size,
                                                   KeyVector &query_keys,
                                                   CacheLocationVector &cache_locations) const {
+    const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
+    if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
+        return EC_UNIMPLEMENTED;
+    }
+
     SPAN_TRACER(request_context);
     const std::string &trace_id = request_context->trace_id();
     ErrorCode ec = EC_ERROR;
@@ -1147,8 +1157,7 @@ ErrorCode CacheManager::ReportOptimizerEvent(RequestContext *request_context,
     return EC_OK;
 }
 
-void CacheManager::FillEmptyLocationSpecs(const InstanceInfoConstPtr &instance_info,
-                                          CacheLocationVector &locations) {
+void CacheManager::FillEmptyLocationSpecs(const InstanceInfoConstPtr &instance_info, CacheLocationVector &locations) {
     const auto &spec_infos = instance_info->location_spec_infos();
     for (auto &location : locations) {
         if (!location || location->spec_size() == 0) {
@@ -1175,6 +1184,11 @@ CacheManager::GetCacheLocationsByBackend(RequestContext *request_context,
                                          int32_t sw_size,
                                          const std::vector<std::string> &location_spec_names,
                                          const std::vector<BackendSelector> &backend_selectors) {
+    const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
+    if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
+        return {EC_UNIMPLEMENTED, {}};
+    }
+
     SPAN_TRACER(request_context);
     const std::string &trace_id = request_context->trace_id();
     auto *service_metrics_collector = dynamic_cast<ServiceMetricsCollector *>(request_context->metrics_collector());
@@ -1318,6 +1332,11 @@ std::pair<ErrorCode, int64_t> CacheManager::GetCacheLocationLen(RequestContext *
                                                                 const KeyVector &keys,
                                                                 const TokenIdsVector &tokens,
                                                                 int32_t sw_size) {
+    const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
+    if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
+        return {EC_UNIMPLEMENTED, 0};
+    }
+
     SPAN_TRACER(request_context);
     const std::string &trace_id = request_context->trace_id();
     auto *service_metrics_collector = dynamic_cast<ServiceMetricsCollector *>(request_context->metrics_collector());
@@ -1387,6 +1406,12 @@ CacheManager::StartWriteCache(RequestContext *request_context,
                               int64_t write_timeout_seconds,
                               int32_t min_replica_count) {
     SPAN_TRACER(request_context);
+    const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
+    if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
+        request_context->error_tracer()->AddErrorMsg("write sessions are unsupported by this instance");
+        return {EC_UNIMPLEMENTED, {}};
+    }
+
     const std::string &trace_id = request_context->trace_id();
     auto *service_metrics_collector = dynamic_cast<ServiceMetricsCollector *>(request_context->metrics_collector());
     if (!location_spec_group_names.empty()) {
@@ -1611,6 +1636,12 @@ CacheManager::FinishWriteCache(RequestContext *request_context,
                                const BlockMask &success_block_mask,
                                std::unique_ptr<WriteLocationManager::WriteLocationInfo> write_location_info_internal) {
     SPAN_TRACER(request_context);
+    const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
+    if (operation_indexer && !operation_indexer->SupportsWriteSession()) {
+        request_context->error_tracer()->AddErrorMsg("write sessions are unsupported by this instance");
+        return EC_UNIMPLEMENTED;
+    }
+
     const std::string &trace_id = request_context->trace_id();
     auto *service_metrics_collector = dynamic_cast<ServiceMetricsCollector *>(request_context->metrics_collector());
     WriteLocationManager::WriteLocationInfo location_info;
@@ -1884,6 +1915,12 @@ CacheManager::MigrateCacheResult CacheManager::MigrateCache(RequestContext *requ
     if (meta_indexer == nullptr) {
         result.ec = EC_INSTANCE_NOT_EXIST;
         result.message = "instance not found: " + instance_id;
+        return result;
+    }
+
+    if (!meta_indexer->SupportsWriteSession()) {
+        result.ec = EC_UNIMPLEMENTED;
+        result.message = "migration is unsupported by this instance";
         return result;
     }
 
@@ -4720,7 +4757,8 @@ ErrorCode CacheManager::DoRecoverOnce() {
                                                       instance_info->location_spec_infos(),
                                                       instance_info->model_deployment(),
                                                       instance_info->location_spec_groups(),
-                                                      static_cast<QueryType>(instance_info->default_query_type()));
+                                                      static_cast<QueryType>(instance_info->default_query_type()),
+                                                      instance_info->disable_write_session());
             if (ec3 != EC_OK) {
                 KVCM_LOG_WARN("CacheManager RegisterInstance failed when recover, skip. ec[%d] instance_group "
                               "name[%s] instance_id[%s]",
@@ -5208,6 +5246,14 @@ CacheManager::GetHostCacheState(RequestContext *request_context,
                                           std::vector<HostCacheMatch>,
                                           "unsupported query type for GetHostCacheState: %s",
                                           QueryTypeToString(query_type).c_str());
+    }
+
+    const std::shared_ptr<MetaIndexer> operation_indexer = meta_indexer_manager_->GetMetaIndexer(instance_id);
+    if (operation_indexer && !operation_indexer->SupportsWriteSession() &&
+        (query_type != QueryType::QT_PREFIX_MATCH ||
+         std::find(backend_types.begin(), backend_types.end(), DataStorageType::DATA_STORAGE_TYPE_TAIR_MEMPOOL) !=
+             backend_types.end())) {
+        return {EC_UNIMPLEMENTED, {}};
     }
 
     size_t window_blocks = 0;

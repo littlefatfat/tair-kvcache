@@ -229,6 +229,11 @@ public:
         return GetShard(hash).Erase(key, hash);
     }
 
+    size_t GetAvailableCapacity(const std::string_view &key) const override {
+        const HashVal hash = CacheShard::ComputeHash(key, hash_seed_);
+        return GetShard(hash).GetAvailableCapacity();
+    }
+
     void AdjustCharge(Handle *handle, ssize_t delta) override {
         auto h = static_cast<HandleImpl *>(handle);
         GetShard(h->GetHash()).AdjustCharge(h, delta);

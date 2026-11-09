@@ -1061,9 +1061,8 @@ public:
         return result;
     }
 
-    MetaLocalBackend *UseRealLocalReclaimBackend(const std::string &id,
-                                                KeyType rejected_prefix = 0,
-                                                bool event_report_prefix = false) {
+    MetaLocalBackend *
+    UseRealLocalReclaimBackend(const std::string &id, KeyType rejected_prefix = 0, bool event_report_prefix = false) {
         stub_.reset(ADDR(MetaIndexer, SampleReclaimCandidates));
         stub_.reset(ADDR(MetaIndexer, GetLocationMapsForMaintenance));
         auto &indexer = meta_indexers_by_instance.at(id);
@@ -3511,7 +3510,9 @@ TEST_F(CacheReclaimerTest, TestHandleDelRes03) {
 
     try {
         throw std::runtime_error("test exception");
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
 
     cache_reclaimer_->HandleDelRes();
     ASSERT_FALSE(cache_reclaimer_->delete_handlers_.empty());
@@ -6430,7 +6431,7 @@ TEST_F(CacheReclaimerTest, TestDoKeySampling) {
 }
 
 TEST_F(CacheReclaimerTest, TestLocalSamplingUsesOneTaskWithoutChangingLegacyBudgets) {
-    auto indexer = mim_->GetMetaIndexer(instance_infos.front()->instance_id());
+    std::shared_ptr<MetaIndexer> indexer = mim_->GetMetaIndexer(instance_infos.front()->instance_id());
     ASSERT_NE(nullptr, indexer);
     indexer->backend_manager_ = std::make_unique<MetaStorageBackendManager>();
     indexer->backend_manager_->persistent_backend_ = std::make_unique<MetaLocalBackend>();
